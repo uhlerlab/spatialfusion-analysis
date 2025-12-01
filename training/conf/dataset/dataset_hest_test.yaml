@@ -1,0 +1,32 @@
+samples: 
+  - "NCBI856"
+  - "NCBI860"
+  - "NCBI873"
+  - "NCBI882"
+  - "TENX120"
+  - "TENX121"
+  - "TENX124"
+  - "TENX125"
+  - "TENX141"
+  - "TENX142"
+  - "TENX95"
+  - "TENX96"
+test_samples:
+  - 'TENX157'
+  - 'NCBI859'
+  - 'TENX118'
+  - 'TENX94'
+  - 'NCBI785'
+  - 'TENX139'
+  - 'TENX143'
+  - 'TENX133'
+  - 'TENX140'
+
+datapath: ${paths.data_root}/hest_processed_data
+rawpath: ${paths.raw_root}/hest_data
+lr_label_path: ${paths.data_root}/hest_processed_data
+
+knn_k: 30
+subgraph_size: 5000
+stride: 2500
+max_cells: 50000

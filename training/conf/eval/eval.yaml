@@ -1,0 +1,7 @@
+#checkpoint_path: ../../../../SpatialFusion/results/checkpoint_dir_ae/paired_model_3085dad0.pt
+checkpoint_path: ../../../../Broad_SpatialFoundation/checkpoint_dir_ae/paired_model_6c22d731.pt
+sample_mode: 'train'
+#embedding_dir: ../../../../SpatialFusion/results/embeddings_ae/full-AE-output-model-3085dad0
+embedding_dir: ../../../../SpatialFusion/results/embeddings_ae/full-AE-output-model-6c22d731
+z1file: 'z1_train.parquet'
+z2file: 'z2_train.parquet'

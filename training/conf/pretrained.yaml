@@ -1,0 +1,9 @@
+pretrained:
+  # relative to the *installed* spatialfusion package's data/ folder
+  ae_relpath:  checkpoint_dir_ae/spatialfusion-multimodal-ae.pt
+  gcn_full_relpath: checkpoint_dir_gcn/spatialfusion-full-gcn.pt
+  gcn_he_relpath:   checkpoint_dir_gcn/spatialfusion-he-gcn.pt
+
+  # allow absolute override via env for power users
+  ae_path:  ${oc.env:AE_CKPT,  ''}
+  gcn_path: ${oc.env:GCN_CKPT, ''}

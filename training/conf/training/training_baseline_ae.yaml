@@ -1,0 +1,20 @@
+log_dir: ${paths.logs}/baseline_ae
+checkpoint_dir: ${paths.checkpoints}/baseline_ae
+
+device: 'cuda:0'
+latent_dim: 64
+enc_hidden_dims: [256, 128]
+dec_hidden_dims: [128, 256]
+batch_size: 128
+epochs: 25
+lr: 1e-3
+freeze_resnet: true
+resnet_backbone: resnet18
+
+loss_weights:
+  recon1: 0.5
+  recon2: 0.5
+  cross12: 0.25
+  cross21: 0.25
+  align: 1.0
+  

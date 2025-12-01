@@ -1,0 +1,6 @@
+# this is the path to the AE trained on 51 samples
+checkpoint_path: ${pretrained.ae_path}
+sample_mode: 'train'
+embedding_dir: ${paths.embeddings}/full-AE-output-model-6c22d731
+z1file: 'z1_train.parquet'
+z2file: 'z2_train.parquet'

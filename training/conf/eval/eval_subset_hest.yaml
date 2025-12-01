@@ -1,0 +1,5 @@
+checkpoint_path: ../../../../SpatialFusion/results/checkpoint_dir_ae/paired_model_9e693874.pt
+sample_mode: 'test'
+embedding_dir: ../../../../SpatialFusion/results/embeddings_ae/full-AE-output-model-9e693874
+z1file: 'z1_test.parquet'
+z2file: 'z2_test.parquet'

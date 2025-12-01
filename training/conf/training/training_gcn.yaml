@@ -1,0 +1,14 @@
+hidden_dim: 10
+num_layers: 2
+node_mask_ratio: 0.9
+combine_mode: 'average' # pick between 'concat', 'average', 'z1', 'z2'
+epochs: 25
+lr: 0.001
+lambda_cls: 0.5
+lambda_reg: 0.1
+batch_size: 1
+device: "cuda"
+
+checkpoint_dir: ${paths.checkpoints}/checkpoint_dir_gcn
+
+use_cls_loss: true

@@ -1,0 +1,13 @@
+# Users can set SPATIALFUSION_ROOT.
+paths:
+  # Root for all run artifacts (logs, ckpts, embeddings, caches, etc.)
+  root: ${oc.env:SPATIALFUSION_ROOT, "../../../../SpatialFusion/results/"}
+
+  # Subdirs under 'root' (override with env if you want)
+  logs:        ${oc.env:LOGS,        ${paths.root}/logs}
+  checkpoints: ${oc.env:CHECKPOINTS, "../../../../SpatialFusion/spatialfusion/data/"}
+  embeddings:  ${oc.env:EMBEDDINGS,  "../../../../Broad_SpatialFoundation"}
+
+  # Data roots (can still be absolute on your cluster)
+  data_root:   ${oc.env:DATA_ROOT,   "../../../../Broad_SpatialFoundation/"}
+  raw_root:    ${oc.env:RAW_ROOT,     "../../../../Broad_SpatialFoundation/"}

@@ -1,0 +1,12 @@
+defaults:
+  - paths
+  - pretrained
+  - dataset: dataset
+  - training: training
+  - eval: eval
+  - _self_
+
+hydra:
+  run:
+    dir: ${paths.root}/hydra/${now:%Y-%m-%d_%H-%M-%S}
+  output_subdir: null # don’t create .hydra/

@@ -1,0 +1,21 @@
+device: 'cuda:0'
+epochs: 25
+lr: 0.001
+batch_size: 128
+
+latent_dim: 64
+enc_hidden_dims:
+- 64
+dec_hidden_dims:
+- 64
+
+log_dir: ${paths.logs}/runs_ae
+checkpoint_dir: ${paths.checkpoints}/checkpoint_dir_ae
+
+loss_weights:
+  align: 1
+  recon1: 0.5
+  recon2: 0.5
+  cross12: 0.25
+  cross21: 0.25
+

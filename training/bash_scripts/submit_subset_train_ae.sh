@@ -1,0 +1,42 @@
+#!/bin/bash
+# ==============================================================
+# Script: run_train_ae.sh
+# Purpose: Launch standard AE training with timestamped logs and GPU control
+# ==============================================================
+
+set -euo pipefail
+
+# --------- Settings ----------
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+SPATIALFUSION_ROOT='../../../../SpatialFusion/results/'
+# Default log directory: use global SPATIALFUSION_ROOT unless LOGS is set
+LOG_DIR="${LOGS:-$SPATIALFUSION_ROOT/logs}"
+mkdir -p "$LOG_DIR"
+
+LOG_FILE="${LOG_DIR}/ae_train_${TIMESTAMP}.log"
+
+SCRIPT='../scripts/train_multi_ae.py'
+
+# --------- GPU Settings ----------
+GPU_ID=${1:-0}  # Default to GPU 0 if not provided
+export CUDA_VISIBLE_DEVICES="$GPU_ID"
+
+# --------- Run Training ----------
+echo "--------------------------------------------------"
+echo "Starting AE training on GPU ${GPU_ID} at ${TIMESTAMP}"
+echo "Logging to: ${LOG_FILE}"
+echo "Script: ${SCRIPT}"
+echo "--------------------------------------------------"
+
+# Allow passing extra Hydra overrides (after GPU arg)
+shift || true
+python "${SCRIPT}" \
+  training=training_ae \
+  dataset=dataset_hest_test \
+  'training.device=cuda:6' \
+  "$@" 2>&1 | tee "$LOG_FILE"
+
+rc=${PIPESTATUS[0]}
+echo "✓ Training complete. Exit code: $rc"
+echo "Logs saved to ${LOG_FILE}"
+exit $rc
