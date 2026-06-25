@@ -4,6 +4,7 @@ This folder contains the `CRC-analysis.ipynb` notebook for advanced spatial tran
 
 ## Contents
 
+- `CRC-analysis-Virchow.ipynb`: Jupyter notebook investigating whether replacing the UNI image encoder with the Virchow2 pathology foundation model produces equivalent spatial clusters on a colorectal cancer (CRC) Visium HD cohort (5 samples: 3 tumor, 2 normal adjacent). It generates Virchow+scGPT SpatialFusion embeddings, sweeps over Leiden resolutions to match two reference tumor niche clusters from the UNI-based model, and computes ARI/NMI and cross-tabulation heatmaps comparing UNI-based and Virchow-based cluster assignments.
 - `CRC-analysis.ipynb`: Jupyter notebook for comprehensive CRC spatial analysis. The workflow includes:
   - Loading and harmonizing multiple CRC and normal colon samples, including AnnData objects and precomputed embeddings.
   - Cell type and cell subtype annotation, cluster grouping, and palette generation for consistent visualization.

@@ -34,6 +34,11 @@ Run these workflows **before** any training, benchmarking, or figure generation 
 Notebooks and scripts used to generate the figures in the SpatialFusion manuscript.
 Each folder includes a README describing inputs, outputs, and the analysis workflow for that figure.
 
+### **segmentation-comparison/**
+
+Supplementary analysis evaluating the effect of alternative cell segmentation (Cellpose) on SpatialFusion embedding quality and spatial domain benchmarking performance on the Xenium ovarian cancer dataset.
+Includes notebooks for running Cellpose segmentation, re-generating all embeddings, and re-running the SDMBench benchmark for comparison against the default 10X segmentation.
+
 ---
 
 ## Environment Setup

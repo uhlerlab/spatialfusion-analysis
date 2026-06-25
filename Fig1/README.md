@@ -6,6 +6,7 @@ This folder contains analysis notebooks for generating and comparing spatial tra
 
 - `compare-baseline-ae.ipynb`: Jupyter notebook for extracting, evaluating, and visualizing embeddings from baseline autoencoder (AE) models and multimodal AEs. It includes code to load trained models, extract cell embeddings, compare classification and batch mixing metrics, and generate publication-quality plots.
 - `compare-pathway-gcn.ipynb`: Jupyter notebook for comparing GCN-based embeddings with and without pathway information. It loads precomputed embeddings, runs PCA, visualizes pathway activation, and quantifies organization and performance using metrics such as Moran's I and cross-validated R².
+- `compare-RNA-embed.ipynb`: Jupyter notebook benchmarking single-cell RNA embedding models (scGPT, STACK, and Nicheformer) for their ability to preserve cell type identity while correcting for batch effects across spatial transcriptomics samples from the HEST dataset. It evaluates embeddings using clustering metrics (ARI, NMI), scib silhouette metrics, and linear probes for cell type classification and batch prediction, producing a scatter plot of Batch Integration Score vs. cell-type F1 score and summary CSV files.
 
 ## How to Run
 

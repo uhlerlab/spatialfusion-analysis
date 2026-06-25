@@ -5,6 +5,7 @@ This folder contains analysis notebooks for benchmarking breast cancer (BRCA) sp
 ## Contents
 
 - `Benchmark-BRCA.ipynb`: Jupyter notebook for benchmarking and evaluating spatial transcriptomics methods on breast cancer dataset. The notebook loads precomputed embeddings and metadata, runs performance metrics, and generates figures for comparison across methods.
+- `Benchmark-BRCA_afterreview.ipynb`: Updated benchmark notebook for the Xenium breast cancer FFPE dataset, comparing four SpatialFusion model variants (UNI+scGPT, UNI+Nicheformer, Virchow+scGPT, Virchow+Nicheformer, plus H&E-only and finetuned versions) against NicheCompass, BANKSY, Nicheformer, scGPT-spatial, OmiCLIP, Novae, and Scanpy. Generates embeddings, runs Leiden clustering matched to annotated regions, computes SDMBench metrics, and outputs a benchmark heatmap SVG and multi-panel spatial cluster PNG.
 
 ## How to Run
 
