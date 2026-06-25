@@ -100,7 +100,7 @@ Benchmarking workflows may require additional dependencies. See `benchmarks/READ
 
 If you use SpatialFusion-Analysis in your work, please cite:
 
-Yates J, Shavakhi M, Choueiri T, Camp S, Van Allen EM, Uhler C. SpatialFusion: A lightweight multimodal foundation model for pathway-informed spatial niche mapping. *bioRxiv*. 2026. doi:10.64898/2026.03.16.712056
+Yates J, Shavakhi M, Choueiri T, Camp S, Van Allen EM, Uhler C. SpatialFusion: A lightweight multimodal framework for pathway-informed spatial niche mapping. *bioRxiv*. 2026. doi:10.64898/2026.03.16.712056
 
 ---
 
