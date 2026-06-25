@@ -45,7 +45,7 @@ This folder contains three Jupyter notebooks for the NSCLC (non-small cell lung 
 ### 4. NSCLC-compare-simple-baselines-with-ABMIL.ipynb
 - **Purpose:** Evaluates whether SpatialFusion niche embeddings can predict tumor stage (pTNM T classification) using simple patient-level classifiers as a comparison to ABMIL.
 - **Main Steps:**
-  - Loads NicheFinder embeddings for malignant niches and constructs per-patient feature vectors (mean or bootstrap-sampled).
+  - Loads SpatialFusion embeddings for malignant niches and constructs per-patient feature vectors (mean or bootstrap-sampled).
   - Performs leave-one-out cross-validation with logistic regression (LR) and random forest (RF) classifiers over a hyperparameter grid.
   - Repeats the same analysis using GEX-derived PCA features as a baseline.
   - Produces AUC/BAC heatmap SVGs for both LR and RF.
