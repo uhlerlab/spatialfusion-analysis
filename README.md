@@ -4,6 +4,8 @@ SpatialFusion-Analysis contains all scripts, configuration files, and Jupyter no
 
 If you are looking for the **SpatialFusion package** to run the framework on your own data, please visit the main SpatialFusion repository instead: https://github.com/uhlerlab/spatialfusion. 
 
+We provide processed objects to reproduce the benchmarking on Zenodo (DOI: 10.5281/zenodo.20934899).
+
 ---
 
 ## Repository Structure
