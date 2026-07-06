@@ -52,7 +52,12 @@ def get_run_dir(cfg):
     """
     run_id = str(uuid.uuid4())[:8]
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_name = f"run_{timestamp}_{run_id}"
+    run_name = (
+        f"{cfg.training.he_encoder}_"
+        f"{cfg.training.rna_encoder}_"
+        f"{cfg.training.alignment_mode}_"
+        f"{timestamp}_{run_id}"
+    )
     run_dir = os.path.join(cfg.training.log_dir, run_name)
     return run_dir, run_id
 
@@ -89,7 +94,11 @@ def main(cfg: DictConfig):
             sample_path = str(cfg.dataset.datapath)
 
         std_feat_1, std_feat_2, _ = load_and_preprocess_sample(
-            sample_name, sample_path, cfg.dataset.max_cells
+            sample_name,
+            sample_path,
+            cfg.dataset.max_cells,
+            he_encoder=cfg.training.he_encoder,
+            rna_encoder=cfg.training.rna_encoder,
         )
 
         if d1_dim is None:
@@ -119,9 +128,24 @@ def main(cfg: DictConfig):
     lambdas = cfg.training.loss_weights
 
     model.train()
-    model_path = os.path.join(
-        cfg.training.checkpoint_dir, f"paired_model_{run_id}.pt")
-    os.makedirs(cfg.training.checkpoint_dir, exist_ok=True)
+
+    run_name = os.path.basename(run_dir)
+
+    ckpt_run_dir = os.path.join(
+        cfg.training.checkpoint_dir,
+        run_name
+    )
+    os.makedirs(ckpt_run_dir, exist_ok=True)
+
+    model_path = os.path.join(ckpt_run_dir, "model.pt")
+    # ---- also save config alongside checkpoint ----
+    ckpt_config_path = os.path.join(ckpt_run_dir, "config.yaml")
+    with open(ckpt_config_path, "w") as f:
+        f.write(OmegaConf.to_yaml(cfg))
+
+    # model_path = os.path.join(
+    #    cfg.training.checkpoint_dir, f"paired_model_{run_id}.pt")
+    # os.makedirs(cfg.training.checkpoint_dir, exist_ok=True)
 
     for epoch in tqdm(range(cfg.training.epochs), desc="Training"):
         epoch_losses = {k: 0.0 for k in [

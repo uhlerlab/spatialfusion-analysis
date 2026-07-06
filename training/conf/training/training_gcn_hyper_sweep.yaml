@@ -1,0 +1,38 @@
+# =========================
+# GCN hyperparameter sweep
+# =========================
+
+# AE configuration
+he_encoder: uni
+rna_encoder: scgpt
+alignment_mode: full
+
+# params
+hidden_dim: 10
+num_layers: 2
+node_mask_ratio: 0.9
+
+# multimodal fusion
+combine_mode: average   # concat | average | gated
+
+# model
+model_type: gcn         # gcn | smoothing
+
+# training
+epochs: 25
+lr: 0.001
+lambda_cls: 0.5
+lambda_reg: 0.1
+batch_size: 1
+device: "cuda"
+
+checkpoint_dir: ${paths.checkpoints}/checkpoint_dir_gcn
+
+# pathway supervision
+use_cls_loss: true
+
+# keep regression mode fixed
+pathway_mode: regression
+
+# Ablation: list pathway names to exclude from regression targets (empty = use all)
+excluded_pathways: []

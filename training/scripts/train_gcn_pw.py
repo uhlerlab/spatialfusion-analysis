@@ -28,7 +28,10 @@ import dgl
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from collections.abc import Mapping
-from spatialfusion.models.gcn import GCNAutoencoder
+from spatialfusion.models.gcn import (
+    GCNAutoencoder,
+    SpatialSmoothingBaseline
+)
 from spatialfusion.utils.gcn_utils import (
     build_knn_graph,
     generate_overlapping_subgraphs,
@@ -36,6 +39,8 @@ from spatialfusion.utils.gcn_utils import (
     plot_training_losses
 )
 import os
+import re
+from pathlib import Path
 
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
@@ -50,6 +55,30 @@ torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
 
 # ---- Local imports
+
+ALIGN = {
+    "full": "full",
+    "recon_only": "recon",
+}
+
+MODEL = {
+    "gcn": "gcn",
+    "smoothing": "smooth",
+}
+
+COMBINE = {
+    "average": "avg",
+    "concat": "cat",
+    "gated": "gate",
+    "z1": "z1",
+    "z2": "z2",
+}
+
+PATHWAY = {
+    "regression": "reg",
+    "concat": "cat",
+    "none": "none",
+}
 
 
 def resolve_sample(sample_info, default_base) -> tuple[str, pl.Path]:
@@ -73,21 +102,88 @@ def resolve_sample(sample_info, default_base) -> tuple[str, pl.Path]:
 
 
 def get_run_dir(cfg) -> tuple[str, str]:
-    """
-    Create a unique run directory for saving outputs and checkpoints.
 
-    Args:
-        cfg (DictConfig): Hydra configuration object with training.checkpoint_dir.
-
-    Returns:
-        tuple[str, str]: (run_dir, run_id)
-    """
     run_id = str(uuid.uuid4())[:8]
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_name = f"gcn_{timestamp}_{run_id}"
-    run_dir = os.path.join(cfg.training.checkpoint_dir, run_name)
+
+    he = getattr(cfg.training, "he_encoder", "uni")
+    rna = getattr(cfg.training, "rna_encoder", "scgpt")
+    align = getattr(cfg.training, "alignment_mode", "avg")
+
+    cls = "cls" if cfg.training.use_cls_loss else "nocls"
+
+    excl = list(getattr(cfg.training, "excluded_pathways", []) or [])
+    if excl:
+        safe = re.sub(r"[^A-Za-z0-9_\-]", "_", excl[0])[:30]
+        ablation_tag = f"_ablation_{safe}"
+    else:
+        ablation_tag = ""
+
+    run_name = (
+        f"{he}_"
+        f"{rna}_"
+        f"{ALIGN.get(align, align)}_"
+        f"{MODEL[cfg.training.model_type]}_"
+        f"{COMBINE[cfg.training.combine_mode]}_"
+        f"{PATHWAY[cfg.training.pathway_mode]}_"
+        f"{cls}"
+        f"{ablation_tag}_"
+        f"{run_id}"
+    )
+
+    run_dir = os.path.join(
+        cfg.training.checkpoint_dir,
+        run_name
+    )
+
     os.makedirs(run_dir, exist_ok=True)
+
     return run_dir, run_id
+
+
+def find_embedding_dir(cfg):
+
+    root = Path(cfg.eval.embedding_root)
+
+    prefix = (
+        f"{cfg.training.he_encoder}_"
+        f"{cfg.training.rna_encoder}_"
+        f"{cfg.training.alignment_mode}"
+    )
+
+    matches = [
+        p for p in root.iterdir()
+        if p.is_dir() and p.name.startswith(prefix)
+    ]
+
+    if len(matches) == 0:
+
+        available = sorted(
+            p.name for p in root.iterdir()
+            if p.is_dir()
+        )
+
+        raise RuntimeError(
+            f"No embeddings found for:\n"
+            f"  he_encoder={cfg.training.he_encoder}\n"
+            f"  rna_encoder={cfg.training.rna_encoder}\n"
+            f"  alignment_mode={cfg.training.alignment_mode}\n\n"
+            f"Available embedding dirs:\n"
+            + "\n".join(available)
+        )
+
+    matches.sort(
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+    chosen = matches[0]
+
+    print(
+        f"✓ Using embeddings:\n"
+        f"  {chosen}"
+    )
+
+    return chosen
 
 
 def standardize_pathways(df: pd.DataFrame, method: str = "robust_z", eps: float = 1e-6, tol: float = 1e-3) -> pd.DataFrame:
@@ -121,27 +217,30 @@ def standardize_pathways(df: pd.DataFrame, method: str = "robust_z", eps: float 
 
 
 def train_gcn_full_graphs(
-    graphs, in_dim, hidden_dim, epochs, lr,
+    graphs, in_dim, out_dim, hidden_dim, epochs, lr,
     lambda_cls, lambda_reg, batch_size,
-    node_mask_ratio, num_layers, use_cls_loss, device,
-    use_huber: bool = True
+    node_mask_ratio, num_layers, use_cls_loss, device, model_type,
+    pathway_mode: str = "regression",
+    use_huber: bool = True, combine_mode: str = "average",
 ):
     """
     Train a GCN autoencoder model on a list of DGL graphs.
 
     Args:
         graphs (list): List of DGLGraph objects.
-        in_dim (int): Input feature dimension.
+        in_dim (int): Input feature dimension (may include pathway features if concat mode).
+        out_dim (int): Output feature dimension for reconstruction (original embedding dim).
         hidden_dim (int): Hidden layer dimension.
         epochs (int): Number of training epochs.
         lr (float): Learning rate.
-        lambda_cls (float): Weight for pathway regression loss.
+        lambda_cls (float): Weight for pathway regression loss (only used in regression mode).
         lambda_reg (float): Weight for latent regularization.
         batch_size (int): Batch size for training.
         node_mask_ratio (float): Ratio of nodes to mask for reconstruction.
         num_layers (int): Number of GCN layers.
-        use_cls_loss (bool): Whether to use pathway regression loss.
+        use_cls_loss (bool): Whether to use pathway regression loss (only in regression mode).
         device (torch.device): Device to train on.
+        pathway_mode (str): "regression" (predict pathways from z) or "concat" (pathways in input).
         use_huber (bool): Use Huber loss for regression if True.
 
     Returns:
@@ -152,28 +251,60 @@ def train_gcn_full_graphs(
         graphs, batch_size=batch_size, shuffle=True, num_workers=0)
 
     # Infer number of pathway targets from the first graph that has labels
-    if use_cls_loss and "label" in graphs[0].ndata:
+    # Only use regression head in "regression" mode
+    if pathway_mode == "regression" and use_cls_loss and "label" in graphs[0].ndata:
         n_classes = graphs[0].ndata["label"].shape[1]
     else:
         n_classes = 0
 
-    model = GCNAutoencoder(
-        in_dim=in_dim,
-        hidden_dim=hidden_dim,
-        out_dim=in_dim,
-        node_mask_ratio=node_mask_ratio,
-        num_layers=num_layers,
-        n_classes=n_classes
-    ).to(device)
+    if model_type == "gcn":
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        model = GCNAutoencoder(
+            in_dim=in_dim,
+            hidden_dim=hidden_dim,
+            out_dim=out_dim,
+            node_mask_ratio=node_mask_ratio,
+            num_layers=num_layers,
+            n_classes=n_classes,
+            combine_mode=combine_mode,
+        ).to(device)
+
+    elif model_type == "smoothing":
+
+        model = SpatialSmoothingBaseline(
+            node_mask_ratio=node_mask_ratio
+        ).to(device)
+
+    else:
+        raise ValueError(
+            f"Unknown model_type: {model_type}"
+        )
+
+    trainable_params = [
+        p for p in model.parameters()
+        if p.requires_grad
+    ]
+
+    optimizer = (
+        torch.optim.Adam(trainable_params, lr=lr)
+        if len(trainable_params) > 0
+        else None
+    )
+
     mse_loss = nn.MSELoss()
     huber = nn.SmoothL1Loss(beta=0.5)  # Huber with small transition point
 
     loss_history = {"total": [], "feat": [], "reg": [],
-                    "cls": []}  # 'cls' now means pathway loss
+                    "cls": []}  # 'cls' means pathway loss (regression mode only)
 
-    model.train()
+    if optimizer is not None:
+        model.train()
+    else:
+        model.eval()
+
+    if model_type == "smoothing":
+        epochs = 1
+
     for epoch in range(epochs):
         epoch_total = epoch_feat = epoch_reg = epoch_cls = 0.0
         print(f"\nEpoch {epoch + 1}/{epochs}")
@@ -183,14 +314,25 @@ def train_gcn_full_graphs(
             batch = batch.to(device)
             x_recon, x_true, node_mask, z, logits = model(batch)
 
-            # Reconstruction on masked nodes
-            loss_feat = mse_loss(x_recon[node_mask], x_true[node_mask])
+            # Reconstruction loss:
+            # - In "concat" mode: reconstruct only the original embedding portion
+            # - In "regression" mode: reconstruct the full input (which is just embedding)
+            if pathway_mode == "concat":
+                # x_true contains [embedding | pathway], we only reconstruct embedding
+                # Original embedding without pathway
+                x_target = batch.ndata["feat_orig"]
+                loss_feat = mse_loss(x_recon[node_mask], x_target[node_mask])
+            else:
+                loss_feat = mse_loss(x_recon[node_mask], x_true[node_mask])
 
             # Latent L2 regularization
-            loss_reg = (z ** 2).mean()
+            if model_type == "gcn":
+                loss_reg = (z ** 2).mean()
+            else:
+                loss_reg = torch.tensor(0.0, device=device)
 
-            # Pathway regression loss (continuous targets)
-            if use_cls_loss and logits is not None and "label" in batch.ndata:
+            # Pathway regression loss (only in regression mode)
+            if pathway_mode == "regression" and use_cls_loss and logits is not None and "label" in batch.ndata:
                 targets = batch.ndata["label"]
                 loss_cls = huber(logits, targets) if use_huber else mse_loss(
                     logits, targets)
@@ -199,9 +341,11 @@ def train_gcn_full_graphs(
 
             loss = loss_feat + lambda_cls * loss_cls + lambda_reg * loss_reg
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            if optimizer is not None:
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
             epoch_total += float(loss.item())
             epoch_feat += float(loss_feat.item())
@@ -214,11 +358,17 @@ def train_gcn_full_graphs(
         loss_history["cls"].append(epoch_cls / n_batches)
         loss_history["reg"].append(epoch_reg / n_batches)
 
-        print(f"Epoch {epoch+1:02d} Summary | "
-              f"Total: {epoch_total / n_batches:.4f} | "
-              f"Feat: {epoch_feat / n_batches:.4f} | "
-              f"Path: {epoch_cls / n_batches:.4f} | "
-              f"Reg: {epoch_reg / n_batches:.4f}")
+        if pathway_mode == "regression":
+            print(f"Epoch {epoch+1:02d} Summary | "
+                  f"Total: {epoch_total / n_batches:.4f} | "
+                  f"Feat: {epoch_feat / n_batches:.4f} | "
+                  f"Path: {epoch_cls / n_batches:.4f} | "
+                  f"Reg: {epoch_reg / n_batches:.4f}")
+        else:
+            print(f"Epoch {epoch+1:02d} Summary [concat mode] | "
+                  f"Total: {epoch_total / n_batches:.4f} | "
+                  f"Feat: {epoch_feat / n_batches:.4f} | "
+                  f"Reg: {epoch_reg / n_batches:.4f}")
 
     return model, loss_history
 
@@ -235,16 +385,22 @@ def main(cfg: DictConfig):
         cfg.training.device if torch.cuda.is_available() else "cpu")
     run_dir, run_id = get_run_dir(cfg)
 
+    embedding_dir = find_embedding_dir(cfg)
+
+    print(f"Using embeddings: {embedding_dir}")
+
+    cfg.eval.embedding_dir = str(embedding_dir)
+
     with open(os.path.join(run_dir, f"config_{run_id}.yaml"), "w") as f:
         f.write(OmegaConf.to_yaml(cfg))
 
     # ============================
-    # combine_mode: "concat" | "average" | "z1" | "z2"
+    # combine_mode: "concat" | "average" | "z1" | "z2" | "gated"
     # ============================
     combine_mode = getattr(cfg.training, "combine_mode", "concat").lower()
-    if combine_mode not in {"concat", "average", "z1", "z2"}:
+    if combine_mode not in {"concat", "average", "z1", "z2", "gated"}:
         raise ValueError(
-            "cfg.training.combine_mode must be one of: 'concat', 'average', 'z1', 'z2'.")
+            "cfg.training.combine_mode must be one of: 'concat', 'average', 'z1', 'z2', 'gated'.")
 
     def _load_df(pathlike: pl.Path) -> pd.DataFrame:
         if pathlike.suffix == ".parquet":
@@ -256,7 +412,7 @@ def main(cfg: DictConfig):
 
     # If a precomputed joint embedding is supplied, use it as-is
     if hasattr(cfg.eval, "zfile") and cfg.eval.zfile:
-        zpath = pl.Path(cfg.eval.embedding_dir) / cfg.eval.zfile
+        zpath = pl.Path(embedding_dir) / cfg.eval.zfile
         if zpath.suffix == ".parquet":
             z_joint = pd.read_parquet(zpath)
         elif zpath.suffix == ".csv":
@@ -268,8 +424,8 @@ def main(cfg: DictConfig):
 
     else:
         # Build from z1 and/or z2 according to combine_mode
-        need_z1 = combine_mode in {"concat", "average", "z1"}
-        need_z2 = combine_mode in {"concat", "average", "z2"}
+        need_z1 = combine_mode in {"concat", "average", "z1", 'gated'}
+        need_z2 = combine_mode in {"concat", "average", "z2", 'gated'}
 
         if need_z1:
             assert hasattr(
@@ -282,11 +438,11 @@ def main(cfg: DictConfig):
         z2 = None
 
         if need_z1:
-            z1_path = pl.Path(cfg.eval.embedding_dir) / cfg.eval.z1file
+            z1_path = pl.Path(embedding_dir) / cfg.eval.z1file
             z1 = _load_df(z1_path).loc[lambda df: ~
                                        df.index.duplicated()].copy()
         if need_z2:
-            z2_path = pl.Path(cfg.eval.embedding_dir) / cfg.eval.z2file
+            z2_path = pl.Path(embedding_dir) / cfg.eval.z2file
             z2 = _load_df(z2_path).loc[lambda df: ~
                                        df.index.duplicated()].copy()
 
@@ -298,7 +454,7 @@ def main(cfg: DictConfig):
             z_joint = z2
             print(f"Using z2 only → z_joint shape: {z_joint.shape}")
 
-        elif combine_mode == "concat":
+        elif combine_mode in {"concat", "gated"}:
             # Align on common cells
             common_idx = z1.index.intersection(z2.index)
             if len(common_idx) == 0:
@@ -369,17 +525,12 @@ def main(cfg: DictConfig):
         coords = coords.astype(np.float32)
         coords = (coords - coords.mean(axis=0)) / (coords.std(axis=0) + eps)
 
-        full_graph = build_knn_graph(coords, k=cfg.dataset.knn_k)
-        full_graph.ndata["feat"] = torch.tensor(joint_emb, dtype=torch.float32)
+        # ---- Load pathway data (needed for both modes) ----
+        pathway_mode = getattr(cfg.training, "pathway_mode", "regression")
+        need_pathway = cfg.training.use_cls_loss or pathway_mode == "concat"
 
-        subgraphs = generate_overlapping_subgraphs(
-            full_graph, coords,
-            subgraph_size=cfg.dataset.subgraph_size,
-            stride=cfg.dataset.stride
-        )
-
-        # ---- optional pathway targets (continuous) ----
-        if cfg.training.use_cls_loss:
+        pathway_features = None
+        if need_pathway:
             path_candidates = [
                 sample_base / sample / "pathway_activation.parquet",
                 pl.Path(str(cfg.dataset.datapath)) /
@@ -390,27 +541,82 @@ def main(cfg: DictConfig):
 
             if label_path is None:
                 print(
-                    f"[{sample}] No pathway_activation.parquet found. Skipping labels for this sample.")
-                full_labels = None
+                    f"[{sample}] No pathway_activation.parquet found. Skipping pathway data for this sample.")
             else:
                 df_labels = pd.read_parquet(label_path)
                 df_labels = df_labels.loc[adata.obs_names]
+
+                excluded = list(getattr(cfg.training, "excluded_pathways", []) or [])
+                if excluded:
+                    missing = [p for p in excluded if p not in df_labels.columns]
+                    if missing:
+                        print(f"[{sample}] WARNING: excluded pathways not found in data: {missing}")
+                    df_labels = df_labels.drop(columns=[p for p in excluded if p in df_labels.columns])
+                    print(f"[{sample}] Excluded {len(excluded)} pathway(s): {excluded}. Remaining: {df_labels.shape[1]}")
+
                 df_labels = standardize_pathways(df_labels, method="robust_z")
-                full_labels = torch.tensor(
+                pathway_features = torch.tensor(
                     df_labels.values, dtype=torch.float32)
+
+        # ---- Build input features based on pathway_mode ----
+        joint_emb_tensor = torch.tensor(joint_emb, dtype=torch.float32)
+        original_emb_dim = joint_emb_tensor.shape[1]
+
+        if pathway_mode == "concat" and pathway_features is not None:
+            # Concatenate pathway features to input
+            input_feat = torch.cat([joint_emb_tensor, pathway_features], dim=1)
+            print(f"[{sample}] Concat mode: {original_emb_dim} emb + {pathway_features.shape[1]} pathway = {input_feat.shape[1]} input dim")
         else:
-            full_labels = None
+            input_feat = joint_emb_tensor
+
+        full_graph = build_knn_graph(coords, k=cfg.dataset.knn_k)
+        full_graph.ndata["feat"] = input_feat
+
+        # Store original embedding for reconstruction target (needed in concat mode)
+        if pathway_mode == "concat":
+            full_graph.ndata["feat_orig"] = joint_emb_tensor
+
+        subgraphs = generate_overlapping_subgraphs(
+            full_graph, coords,
+            subgraph_size=cfg.dataset.subgraph_size,
+            stride=cfg.dataset.stride
+        )
 
         for sg in subgraphs:
-            if cfg.training.use_cls_loss and full_labels is not None:
+            # In regression mode: store pathway as labels for regression head
+            if pathway_mode == "regression" and cfg.training.use_cls_loss and pathway_features is not None:
                 orig_node_ids = sg.ndata[dgl.NID].numpy()
-                sg.ndata["label"] = full_labels[orig_node_ids]
+                sg.ndata["label"] = pathway_features[orig_node_ids]
+
+            # In concat mode: store original embedding for reconstruction target
+            if pathway_mode == "concat":
+                orig_node_ids = sg.ndata[dgl.NID].numpy()
+                sg.ndata["feat_orig"] = joint_emb_tensor[orig_node_ids]
+
             sg = dgl.add_self_loop(sg)
             graphs.append(sg)
 
+    # Determine dimensions
+    pathway_mode = getattr(cfg.training, "pathway_mode", "regression")
+    in_dim = graphs[0].ndata["feat"].shape[1]
+
+    # out_dim is the reconstruction target dimension
+    # - In concat mode: reconstruct only original embedding (without pathway features)
+    # - In regression mode: reconstruct full input
+    if pathway_mode == "concat" and "feat_orig" in graphs[0].ndata:
+        out_dim = graphs[0].ndata["feat_orig"].shape[1]
+    else:
+        out_dim = in_dim
+
+    print(f"\n{'='*60}")
+    print(f"Pathway mode: {pathway_mode}")
+    print(f"Input dim: {in_dim}, Output (reconstruction) dim: {out_dim}")
+    print(f"{'='*60}\n")
+
     model, loss_history = train_gcn_full_graphs(
         graphs=graphs,
-        in_dim=graphs[0].ndata["feat"].shape[1],
+        in_dim=in_dim,
+        out_dim=out_dim,
         hidden_dim=cfg.training.hidden_dim,
         epochs=cfg.training.epochs,
         lr=cfg.training.lr,
@@ -420,7 +626,10 @@ def main(cfg: DictConfig):
         node_mask_ratio=cfg.training.node_mask_ratio,
         num_layers=cfg.training.num_layers,
         use_cls_loss=cfg.training.use_cls_loss,
-        device=device
+        model_type=cfg.training.model_type,
+        combine_mode=combine_mode,
+        device=device,
+        pathway_mode=pathway_mode
     )
 
     torch.save(model.state_dict(), os.path.join(run_dir, "model.pt"))
